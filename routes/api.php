@@ -2,7 +2,10 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\SalesController;
 
+// URLは「/api/purchase」になります
+Route::post('/purchase', [SalesController::class, 'purchase']);
 /*
 |--------------------------------------------------------------------------
 | API Routes

@@ -1,45 +1,38 @@
 <?php
 
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProductController; // 1回だけに整理
 use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
 | Web Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register web routes for your application. These
-| routes are loaded by the RouteServiceProvider within a group which
-| contains the "web" middleware group. Now create something great!
-|
 */
 
+// 1. トップページ
 Route::get('/', function () {
     return view('welcome');
 });
-use App\Http\Controllers\AuthController;
 
-// ログイン画面を表示するルート
-Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
+// 2. 認証が必要な画面グループ（ログイン後のみアクセス可能）
+Route::middleware(['auth'])->group(function () {
 
-// ログイン処理を実行するルート
-Route::post('/login', [AuthController::class, 'login'])->name('login.post');
+    // ダッシュボード（Breeze標準）
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->middleware(['verified'])->name('dashboard');
 
-// 新規登録画面（仮のルーティング。エラー防止用）
-Route::get('/register', function () {
-    return '新規登録画面（未作成）';
+    // プロフィール管理（Breeze標準）
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // 📦 商品管理用のルーティング
+    // Route::resource を使うと、index, create, store, show, edit, update, destroy の7つが自動でこのグループ内に登録されます
+    Route::resource('products', ProductController::class);
+
 });
 
-use App\Http\Controllers\RegisterController;
-
-// ユーザー新規登録画面を表示する
-Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
-
-// ユーザー新規登録処理を実行する
-Route::post('/register', [RegisterController::class, 'register']);
-use App\Http\Controllers\ProductController;
-
-// 商品一覧（検索も同じURLのGETで行います）
-Route::get('/products', [ProductController::class, 'index'])->name('products.index');
-
-// 商品削除処理
-Route::delete('/products/{id}', [ProductController::class, 'destroy'])->name('products.destroy');
+// 3. 認証関連のルーティング（Breezeのログイン・登録機能などを読み込み）
+require __DIR__.'/auth.php';

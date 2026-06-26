@@ -2,43 +2,151 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Models\Product; // 商品モデル
+use Illuminate\Http\Request; 
+use App\Models\Product;
+use App\Models\Company; // セレクトボックス用にCompanyモデルをインポート
+// 作成したFormRequestをインポート
+use App\Http\Requests\ProductRegisterRequest; 
+use App\Http\Requests\ProductUpdateRequest;
+use Illuminate\Support\Facades\Storage; // 画像削除・保存用
 
 class ProductController extends Controller
 {
-    // 商品一覧・検索処理
+    /**
+     * 3-3. 商品情報一覧画面（検索機能付き）
+     */
     public function index(Request $request)
     {
-        // 1. 検索クエリの準備（初期状態は全件取得のベースを作成）
+        $keyword = $request->input('keyword');
+        $companyId = $request->input('company_id'); // メーカー検索用項目を追加
+
         $query = Product::query();
 
-        // 2. 検索キーワードがある場合（商品名での部分一致検索）
-        if ($request->filled('keyword')) {
-            $query->where('product_name', 'like', '%' . $request->keyword . '%');
+        // 商品名の部分一致検索
+        if (!empty($keyword)) {
+            $query->where('product_name', 'LIKE', "%{$keyword}%");
         }
 
-        // 3. メーカー名が選択されている場合（完全一致検索）
-        if ($request->filled('maker_id')) {
-            $query->where('maker_id', $request->maker_id);
+        // メーカー（企業名）での検索
+        if (!empty($companyId)) {
+            $query->where('company_id', $companyId);
         }
 
-        // 検索結果を取得
         $products = $query->get();
+        $companies = Company::all(); // 検索フォームのセレクトボックス用
 
-        // メーカー一覧を取得（セレクトボックス用、実務ではMakerモデル等から取得）
-        // $makers = Maker::all();
-
-        return view('products.index', compact('products'));
+        return view('products.index', compact('products', 'keyword', 'companies', 'companyId'));
     }
 
-    // 商品削除処理
-    public function destroy($id)
+    /**
+     * 3-4. 商品情報登録画面（表示）
+     */
+    public function create()
+    {
+        // 登録画面のセレクトボックスに表示するために、全メーカーを取得して渡す
+        $companies = Company::all();
+        return view('products.create', compact('companies'));
+    }
+
+    /**
+     * 商品情報登録処理（保存実行）
+     */
+    public function store(ProductRegisterRequest $request) // フォームリクエストに変更
+    {
+        // フォームリクエストでバリデーション済みのデータを取得
+        $validated = $request->validated();
+
+        // 画像のアップロード処理
+        $imagePath = null;
+        if ($request->hasFile('product_image')) {
+            // storage/app/public/products フォルダに保存（シンボリックリンクの設定が必要です）
+            $imagePath = $request->file('product_image')->store('products', 'public');
+        }
+
+        // データベースに登録
+        Product::create([
+            'product_name' => $validated['product_name'],
+            'company_id'   => $validated['company_id'],
+            'price'        => $validated['price'],
+            'stock'        => $validated['stock'],
+            'comment'      => $validated['comment'] ?? null,
+            'image_path'   => $imagePath, // 各自のDB定義のカラム名に合わせて調整してください
+        ]);
+
+        return redirect()->route('products.create')->with('success', '商品を登録しました。');
+    }
+
+    /**
+     * 3-5. 商品情報詳細画面
+     */
+    public function show($id)
     {
         $product = Product::findOrFail($id);
+        return view('products.show', compact('product'));
+    }
+
+
+/**
+     * 3-6. 商品情報編集画面（表示）
+     */
+    public function edit($id)
+    {
+        $product = Product::findOrFail($id);
+        $companies = Company::all();
+        return view('products.edit', compact('product', 'companies'));
+    }
+
+    /**
+     * 商品情報編集処理（更新実行）
+     */
+    public function update(ProductUpdateRequest $request, $id)
+    {
+        $validated = $request->validated();
+        $product = Product::findOrFail($id);
+
+        $imagePath = $product->image_path;
+        if ($request->hasFile('product_image')) {
+            if ($product->image_path) {
+                Storage::disk('public')->delete($product->image_path);
+            }
+            $imagePath = $request->file('product_image')->store('products', 'public');
+        }
+
+        $product->update([
+            'product_name' => $validated['product_name'],
+            'company_id'   => $validated['company_id'],
+            'price'        => $validated['price'],
+            'stock'        => $validated['stock'],
+            'comment'      => $validated['comment'] ?? null,
+            'image_path'   => $imagePath,
+        ]);
+
+        return redirect()->route('products.edit', $id)->with('success', '商品情報を更新しました。');
+    }
+
+    /**
+     * 商品情報削除処理
+     */
+
+public function destroy($id)
+{
+    try {
+        // 1. 対象のレコードを取得
+        $product = Product::findOrFail($id);
+
+        // 2. 画像ファイルが存在すればストレージから削除
+        if ($product->image) {
+            Storage::disk('public')->delete($product->image); 
+        }
+
+        // 3. データベースからレコードを削除
         $product->delete();
 
-        // 削除後、一覧画面にリダイレクトしてメッセージを表示
-        return redirect()->route('products.index')->with('success', '商品を削除しました。');
+        // 4. 非同期（Ajax）に正常終了のJSONを返す
+        return response()->json(['success' => true, 'message' => '商品を削除しました。']);
+
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => '削除に失敗しました。'], 500);
     }
+}
 }
