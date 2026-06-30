@@ -15,28 +15,63 @@ class ProductController extends Controller
     /**
      * 3-3. 商品情報一覧画面（検索機能付き）
      */
-    public function index(Request $request)
-    {
-        $keyword = $request->input('keyword');
-        $companyId = $request->input('company_id'); // メーカー検索用項目を追加
+public function index(Request $request)
+{
+    // パラメーターの取得
+    $keyword = $request->input('keyword');
+    $companyId = $request->input('company_id');
+    $minPrice = $request->input('min_price');
+    $maxPrice = $request->input('max_price');
+    $minStock = $request->input('min_stock');
+    $maxStock = $request->input('max_stock');
 
-        $query = Product::query();
+    // クエリビルダの開始
+    $query = Product::query();
 
-        // 商品名の部分一致検索
-        if (!empty($keyword)) {
-            $query->where('product_name', 'LIKE', "%{$keyword}%");
-        }
-
-        // メーカー（企業名）での検索
-        if (!empty($companyId)) {
-            $query->where('company_id', $companyId);
-        }
-
-        $products = $query->get();
-        $companies = Company::all(); // 検索フォームのセレクトボックス用
-
-        return view('products.index', compact('products', 'keyword', 'companies', 'companyId'));
+    // 商品名検索
+    if (!empty($keyword)) {
+        $query->where('product_name', 'LIKE', "%{$keyword}%");
     }
+
+    // メーカー検索
+    if (!empty($companyId)) {
+        $query->where('company_id', $companyId);
+    }
+
+    // 価格（下限）検索
+    if (!empty($minPrice)) {
+        $query->where('price', '>=', $minPrice);
+    }
+
+    // 価格（上限）検索
+    if (!empty($maxPrice)) {
+        $query->where('price', '<=', $maxPrice);
+    }
+
+    // 在庫数（下限）検索
+    if (!empty($minStock)) {
+        $query->where('stock', '>=', $minStock);
+    }
+
+    // 在庫数（上限）検索
+    if (!empty($maxStock)) {
+        $query->where('stock', '<=', $maxStock);
+    }
+
+    // ★リレーション（company）を一緒に、確実に取得する
+    $products = $query->with('company')->get();
+    $companies = Company::all();
+
+    // Ajaxリクエストの場合はJSONデータを返す
+    if ($request->ajax()) {
+        return response()->json([
+            'products' => $products
+        ]);
+    }
+
+    // 通常の画面表示（必要な変数をすべて compact で渡します）
+    return view('products.index', compact('products', 'companies', 'keyword', 'companyId'));
+}
 
     /**
      * 3-4. 商品情報登録画面（表示）
